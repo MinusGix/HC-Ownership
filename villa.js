@@ -393,12 +393,31 @@ function isValidPermissionValue (permission, value) {
 
 	return getPermissionValues(permission).includes(value);
 }
-function setMRolePermissionLevel (core, channelName, roleName, permission, level) {
+function setMRolePermissionLevel (core, channelName, modRoleName, permission, level) {
 	if (level === undefined) {
 		return false;
 	}
 
-	let role = getChannelMRole()
+	let role = getChannelMRole(core, channelName, modRoleName);
+
+	if (role === undefined || role === null) {
+		return false;
+	}
+	role.permissions[permission] = level;
+
+	return true;
+}
+function getMRolePermissionLevel (core, channelName, modRoleName, permission) {
+	let role = getChannelMRole(core, channelName, modRoleName);
+	if (typeof(role) !== 'object') {
+		return undefined;
+	}
+	let level = role.permissions[permission];
+
+	if (level === undefined) {
+		return "default";
+	}
+	return level;
 }
 
 exports.run = async (core, server, socket, data) => {
@@ -813,23 +832,81 @@ exports.instr = {
 		}
 	},
 
-	'set-permission': async (core, server, socket, data) => {
+	'get-role-permission': async (core, server, socket, data) => {
+		// TODO: have a permission which makes so you can / can't get this
 		let channel = socket.channel;
 		let trip = socket.trip;
-		let roleName = socket.role;
-		let permissionName = socket.perm;
+		let roleName = data.role;
+		let permissionName = data.perm;
+		let getDirect = data.stored === undefined ? false : data.stored;
+
+		if (typeof(roleName) !== 'string') {
+			return server.reply({
+				cmd: 'warn',
+				text: "Please supply a role."
+			}, socket);
+		} else if (!doesRoleExist(core, channel, roleName)) {
+			return server.reply({
+				cmd: 'warn',
+				text: "That role does not exist."
+			}, socket);
+		} else if (typeof(permissionName) !== 'string') {
+			return server.reply({
+				cmd: 'warn',
+				text: "Please supply a permission name."
+			}, socket);
+		} else if (!doesPermissionExist(permissionName)) {
+			return server.reply({
+				cmd: 'warn',
+				text: "That permission does not exist."
+			}, socket);
+		}
+
+		let level = getMRolePermissionLevel(core, channel, getModifiedRoleName(roleName), permissionName);
+		if (level !== false && level !== undefined) {
+			if (!getDirect) {
+				level = getPermissionLevel(permissionName, level);
+			}
+
+			return server.reply({
+				cmd: 'info',
+				text: `Permission Level: ${level}`
+			}, socket);
+		} else {
+			return server.reply({
+				cmd: 'warn',
+				text: "There was an issue getting the permission. Report this, please."
+			}, socket);
+		}
+	},
+
+	'set-role-permission': async (core, server, socket, data) => {
+		let channel = socket.channel;
+		let trip = socket.trip;
+		let roleName = data.role;
+		let permissionName = data.perm;
 		// TODO: do some loose casting when you make this a /command so "true" -> true, "123" -> 123
-		let value = socket.to;
+		let value = data.to;
 
 		if (!hasChannelOwnerPowers(core, channel, trip)) {
 			return server.reply({
 				cmd: 'warn',
 				text: "You can not set a permission."
 			}, socket);
+		} else if (typeof(roleName) !== 'string') {
+			return server.reply({
+				cmd: 'warn',
+				text: "Please supply a role to set the permission on."
+			}, socket);
 		} else if (!doesRoleExist(core, channel, roleName)) {
 			return server.reply({
 				cmd: 'warn',
 				text: "That role does not exist."
+			}, socket);
+		} else if (typeof(permissionName) !== 'string') {
+			return server.reply({
+				cmd: 'warn',
+				text: "Please supply a permission."
 			}, socket);
 		} else if (!doesPermissionExist(permissionName)) {
 			return server.reply({
@@ -848,7 +925,7 @@ exports.instr = {
 			}, socket);
 		}
 
-		if (setMRolePermissionLevel(core, channelName, permissionName, findPermissionLevelFromValue(permissionName, value))) {
+		if (setMRolePermissionLevel(core, channel, getModifiedRoleName(roleName), permissionName, findPermissionLevelFromValue(permissionName, value))) {
 			return server.reply({
 				cmd: 'info',
 				text: "Set permission level."
