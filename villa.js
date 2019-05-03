@@ -351,7 +351,7 @@ function getPermissionLevel (permission, level) {
 	return null;
 }
 // Returns value of permission. Returns undefined if the permission does not exist
-function getUserPermission (core, channelName, trip, permission) {
+function getUserPermission (core, channelName, trip, permission, expandDefault=false) {
 	if (!doesPermissionExist(permission)) {
 		return undefined;
 	}
@@ -360,7 +360,7 @@ function getUserPermission (core, channelName, trip, permission) {
 	let roleNames = getUserMRoles(core, channelName, trip);
 	let masterLevel = "default";
 	for (let i = 0; i < roleNames.length; i++) {
-		let role = roles[roleName[i]];
+		let role = roles[roleNames[i]];
 
 		if (role.hasOwnProperty("permissions")) {
 			// note: role.permissions[permission] holds the level, not the value, so it's a digit
@@ -373,6 +373,10 @@ function getUserPermission (core, channelName, trip, permission) {
 				// otherwise, ignore this permission value.
 			}
 		}
+	}
+
+	if (expandDefault && masterLevel === "default") {
+		masterLevel = "0";
 	}
 
 	return masterLevel;
@@ -944,10 +948,26 @@ exports.instr = {
 exports.initHooks = (server) => {
 	server.registerHook('in', 'chat', this.chatHook);
 	server.registerHook('in', 'saveconfig', this.saveConfigHook);
+	server.registerHook('in', 'invite', this.inviteHook);
+};
+
+exports.inviteHook = (core, server, socket, payload) => {
+	let level = getPermissionLevel("canInvite", getUserPermission(core, socket.channel, socket.trip, "canInvite", true));
+
+	if (level === false) {
+		server.reply({
+			cmd: 'warn',
+			text: "You are not allowed to invite in this channel."
+		}, socket);
+		return false;
+	}
+
+	return payload;
 };
 
 exports.saveConfigHook = (core, server, socket, payload) => {
 	// TODO: make a function to cleanup the data we store. Remove empty channels (no roles, no owner), etc.
+	return payload;
 };
 
 exports.chatHook = (core, server, socket, payload) => {
