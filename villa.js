@@ -23,7 +23,7 @@ function purifyNick (nick) {
 	return nick;
 }
 
-const ROLE_NAME_REGEX = /[a-zA-Z_\-\|\!\(\)\+\=\;\:]/;
+const ROLE_NAME_REGEX = /[a-zA-Z_\-\|\(\)\+\=\;\:]/;
 function isValidRoleName (roleName) {
 	return typeof(roleName) === 'string' && ROLE_NAME_REGEX.test(roleName);
 }
@@ -218,10 +218,20 @@ function getUnModifiedRoleName (modRoleName) {
 function doesChannelHaveRolesProperty (core, channelName) {
 	return getChannelData(core, channelName).hasOwnProperty('roles');
 }
+function isSpecialMRole (modRoleName) {
+	return modRoleName === '$!USER';
+}
+function isSpecialRole (roleName) {
+	return isSpecialMRole(getModifiedRoleName(roleName));
+}
 function getChannelRoles(core, channelName) {
 	let channel = getChannelData(core, channelName);
 	if (!doesChannelHaveRolesProperty(core, channelName)) {
-		channel.roles = {};
+		channel.roles = {
+			'$!USER': {
+				permissions: {},
+			}
+		};
 	}
 	return channel.roles;
 }
@@ -302,6 +312,7 @@ function getUserMRoles (core, channelName, trip) {
 			userRoles.push(role);
 		}
 	}
+	userRoles.push('$!USER');
 
 	return userRoles;
 }
@@ -835,6 +846,8 @@ exports.instr = {
 			}, socket);
 		}
 	},
+
+	// TODO: Add function to destroy a role
 
 	'get-role-permission': async (core, server, socket, data) => {
 		// TODO: have a permission which makes so you can / can't get this
